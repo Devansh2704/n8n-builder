@@ -1,0 +1,191 @@
+{
+  "name": "Prmpt Lead Engine",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manual-trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "sheetName": "raw_import"
+      },
+      "id": "airtable-read",
+      "name": "Read Airtable Import",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [420, 300],
+      "notes": "Use Airtable trigger/read from raw_import table"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.category}}",
+              "operation": "regex",
+              "value2": "(beauty|fashion|jewellery|food|home)"
+            }
+          ]
+        }
+      },
+      "id": "if-category-fit",
+      "name": "Filter Categories",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [640, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://api.clay.com/v1/enrich",
+        "options": {}
+      },
+      "id": "clay-enrich",
+      "name": "Clay Enrichment",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [860, 220],
+      "notes": "Call Clay table/API to enrich contact + company"
+    },
+    {
+      "parameters": {
+        "jsCode": "const ad = $json.isRunningAds ? 20 : 0;\nconst category = 20;\nconst weakness = $json.creativeWeakness ? 20 : 0;\nconst contact = ($json.founderEmail || $json.marketingEmail) ? 20 : 0;\nconst proxy = $json.socialStrengthScore || 10;\nconst score = Math.min(100, category + ad + weakness + contact + proxy);\nreturn [{...$json, leadScore: score, priority: score >= 80 ? 'A' : score >= 60 ? 'B' : 'HOLD'}];"
+      },
+      "id": "score-lead",
+      "name": "Score Lead",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1080, 220]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{$json.leadScore}}",
+              "operation": "largerEqual",
+              "value2": 60
+            }
+          ]
+        }
+      },
+      "id": "if-qualified",
+      "name": "Qualified?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1300, 220]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "table": "review_queue"
+      },
+      "id": "airtable-review",
+      "name": "Push to Airtable Review Queue",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2,
+      "position": [1520, 160]
+    },
+    {
+      "parameters": {
+        "url": "https://server.smartlead.ai/api/v1/campaigns/{{ $json.campaignId }}/leads",
+        "options": {}
+      },
+      "id": "smartlead-push",
+      "name": "Push to Smartlead",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1740, 160],
+      "notes": "Only after manual QA status = approved"
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Read Airtable Import",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Airtable Import": {
+      "main": [
+        [
+          {
+            "node": "Filter Categories",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Categories": {
+      "main": [
+        [
+          {
+            "node": "Clay Enrichment",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Clay Enrichment": {
+      "main": [
+        [
+          {
+            "node": "Score Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Score Lead": {
+      "main": [
+        [
+          {
+            "node": "Qualified?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Qualified?": {
+      "main": [
+        [
+          {
+            "node": "Push to Airtable Review Queue",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Push to Airtable Review Queue": {
+      "main": [
+        [
+          {
+            "node": "Push to Smartlead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
